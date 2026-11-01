@@ -1,0 +1,52 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: role-template-payment-open-api
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    # 聚合到匿名角色：业务系统调用支付 API 时不带 Halo 登录态，
+    # 安全性由插件内的 ApiKeyWebFilter（X-API-Key）与渠道验签保证。
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+    plugin.halo.run/plugin-name: pangu-payment
+  annotations:
+    rbac.authorization.halo.run/module: "支付中心"
+    rbac.authorization.halo.run/display-name: "支付开放接口"
+    rbac.authorization.halo.run/dependency-rules: "[]"
+    rbac.authorization.halo.run/ui-permissions-aggregated: "[]"
+rules:
+  # 开放 API 挂在 /apis/api.payment.pangu.tax/v1alpha1 下（Halo 标准 apiGroup 形式），
+  # 这样才走 RBAC 判定；/api/** 前缀在 Halo 2.27 里硬性要求登录态，无法匿名放行。
+  - apiGroups: ["api.payment.pangu.tax"]
+    # Halo 的 RBAC 把 /payments/{code}/proof 解析成 {resource: payments, subresource: proof}，
+    # 匹配时按 "payments/proof" 这个整体比对，通配符 payments/* 不被识别，
+    # 必须逐个子资源列出。漏写时请求会被安全链重定向到登录页（302），不是 403。
+    resources:
+      - providers
+      - payments
+      - payments/sync
+      - payments/close
+      - payments/status
+      - payments/proof
+      - callbacks
+      - config
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: role-template-payment-manage
+  labels:
+    halo.run/role-template: "true"
+    # 聚合到超管：后台管理端点涉及渠道密钥与资金流水，只给最高权限角色。
+    rbac.authorization.halo.run/aggregate-to-super-role: "true"
+    plugin.halo.run/plugin-name: pangu-payment
+  annotations:
+    rbac.authorization.halo.run/module: "支付中心"
+    rbac.authorization.halo.run/display-name: "支付中心管理"
+    rbac.authorization.halo.run/dependency-rules: "[]"
+    rbac.authorization.halo.run/ui-permissions-aggregated: "[]"
+rules:
+  - apiGroups: ["console.api.payment.pangu.tax"]
+    resources: ["*"]
+    verbs: ["*"]

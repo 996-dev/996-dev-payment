@@ -1,0 +1,54 @@
+/**
+ * 共享 Java API 模块。
+ *
+ * <p>只放稳定契约：扩展点接口、命令/结果 DTO、状态常量。
+ * 严禁依赖插件实现模块中的任何类，否则使用方会被迫引入实现 jar。
+ *
+ * <p>发布坐标：run.pangu.payment:pangu-payment-api:1.0.0
+ * 使用方以 {@code compileOnly} 引入，并在 plugin.yaml 的
+ * {@code spec.pluginDependencies} 中声明 {@code pangu-payment}，
+ * 运行时由本插件提供类型与实现。
+ */
+plugins {
+    id 'java-library'
+}
+
+group = 'run.pangu.payment'
+version = '1.0.0'
+
+// 默认模块名是 'api'，这里固定发布名，使用方依赖 pangu-payment-api
+base {
+    archivesName = 'pangu-payment-api'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 只用 Halo 的扩展点契约（org.pf4j.ExtensionPoint）与 Reactor，
+    // compileOnly 保证 API jar 不夹带宿主实现。
+    compileOnly platform('run.halo.tools.platform:plugin:2.27.1')
+    compileOnly 'run.halo.app:api'
+    compileOnly 'io.projectreactor:reactor-core'
+}
+
+java {
+    // Halo 2.27 的 api artifact 是 Java 21 字节码（module metadata 要求 JVM 21+），
+    // 因此 toolchain 与 release 都必须为 21，否则 javac 拒绝读取依赖。
+    // 使用方插件本身也运行在 JDK 21 上，不存在兼容面收窄。
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
+}

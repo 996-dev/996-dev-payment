@@ -1,0 +1,988 @@
+/**
+ * 支付中心通用样式。
+ *
+ * <p>视觉层一律继承 Halo 控制台的设计令牌（`--colors-*` 为 RGB 三元组，
+ * 用 `rgb(var(--colors-primary))` 取色），不自己造一套配色。
+ * 这样主色/圆角/边框随宿主主题变化，明暗模式也不用单独适配。
+ *
+ * <p>令牌全部带 fallback：宿主令牌改名时退回到 Halo 2.27 的实际取值，
+ * 页面只是失去"跟随主题"，不会变成一片白或透明。
+ */
+
+:root {
+  /* Halo 令牌映射：76 203 160 是 2.27 的 --colors-primary 实际值 */
+  --pp-primary: rgb(var(--colors-primary, 76 203 160));
+  --pp-primary-strong: rgb(var(--colors-primary, 76 203 160) / 0.86);
+  --pp-primary-soft: rgb(var(--colors-primary, 76 203 160) / 0.1);
+  --pp-danger: rgb(var(--colors-danger, 215 29 29));
+  --pp-danger-soft: rgb(var(--colors-danger, 215 29 29) / 0.08);
+
+  /* 中性色：与 Halo 控制台正文色 / 内容区底色对齐 */
+  --pp-surface: #ffffff;
+  --pp-surface-2: #f8fafc;
+  --pp-canvas: #eff4f9;
+  --pp-border: #e5e7eb;
+  --pp-border-strong: #d1d5db;
+  --pp-text: #1f2937;
+  --pp-text-2: #6b7280;
+  --pp-text-3: #9ca3af;
+
+  /* 语义色保留具体值：成功/警告在薄荷绿主色下需要足够对比度 */
+  --pp-ok: #047857;
+  --pp-ok-soft: #ecfdf5;
+  --pp-warn: #b45309;
+  --pp-warn-soft: #fffbeb;
+  --pp-info: #1d4ed8;
+  --pp-info-soft: #eff6ff;
+  --pp-muted-soft: #f3f4f6;
+
+  /* 圆角/投影收敛到 Halo 的克制风格：4px 基础圆角 + 极轻投影 */
+  --pp-radius: var(--borderRadius-base, 4px);
+  --pp-radius-lg: calc(var(--borderRadius-base, 4px) + 2px);
+  --pp-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  --pp-shadow-pop: 0 8px 28px rgb(17 24 39 / 0.12);
+  --pp-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------- 页面骨架 ---------- */
+
+.pp-page {
+  padding: 16px 20px 48px;
+  color: var(--pp-text);
+}
+
+.pp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pp-header h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.pp-sub {
+  margin: 5px 0 0;
+  font-size: 13px;
+  color: var(--pp-text-2);
+}
+
+/* ---------- 汇总卡片 ---------- */
+
+.pp-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pp-stat {
+  padding: 14px 16px;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pp-stat-label {
+  font-size: 12px;
+  color: var(--pp-text-2);
+}
+
+.pp-stat strong {
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.pp-stat small {
+  font-size: 12px;
+  color: var(--pp-text-3);
+}
+
+/* 可点击的统计卡（如"待审核"）：点一下直接筛选，省掉找 Tab 的动作 */
+.pp-stat.is-action {
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.pp-stat.is-action:hover {
+  border-color: var(--pp-primary);
+}
+
+.pp-stat.is-action:focus-visible {
+  outline: 2px solid var(--pp-primary);
+  outline-offset: 2px;
+}
+
+/* 有积压时用警告色，运营一眼能看到；不用主色，薄荷绿会被误读成"正常" */
+.pp-stat.is-attention {
+  border-color: var(--pp-warn);
+  background: var(--pp-warn-soft);
+}
+
+.pp-stat.is-attention strong,
+.pp-stat.is-attention small {
+  color: var(--pp-warn);
+}
+
+/* 与上/下块拉开间距（VAlert 等组件自带 margin:0） */
+.pp-gap {
+  margin-bottom: 16px;
+}
+
+/* ---------- 工具条 ---------- */
+
+.pp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pp-toolbar .spacer {
+  flex: 1;
+}
+
+.pp-search {
+  position: relative;
+  min-width: 220px;
+}
+
+.pp-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 28px 7px 30px;
+  border: 1px solid var(--pp-border-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  background: var(--pp-surface);
+  color: var(--pp-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pp-search input:focus {
+  border-color: var(--pp-primary);
+  box-shadow: 0 0 0 3px rgb(var(--colors-primary, 76 203 160) / 0.15);
+}
+
+.pp-search svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--pp-text-3);
+  pointer-events: none;
+}
+
+.pp-search .clear-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: var(--pp-muted-soft);
+  color: var(--pp-text-2);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pp-select {
+  padding: 7px 10px;
+  border: 1px solid var(--pp-border-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--pp-surface);
+  color: var(--pp-text);
+  outline: none;
+  cursor: pointer;
+}
+
+.pp-select:focus {
+  border-color: var(--pp-primary);
+}
+
+.pp-toolbar-note {
+  font-size: 12px;
+  color: var(--pp-text-3);
+}
+
+/* ---------- Tab 状态筛选 ---------- */
+
+.pp-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--pp-muted-soft);
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.pp-tab {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: #4b5563;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.pp-tab:hover {
+  color: var(--pp-text);
+}
+
+.pp-tab.is-active {
+  background: var(--pp-surface);
+  color: #111827;
+  font-weight: 500;
+  box-shadow: var(--pp-shadow);
+}
+
+.pp-tab .cnt {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--pp-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-tab.is-active .cnt {
+  color: var(--pp-primary);
+}
+
+/* ---------- 徽标 / 标签 ---------- */
+
+.pp-tag {
+  padding: 1px 6px;
+  border-radius: var(--pp-radius);
+  background: var(--pp-muted-soft);
+  font-size: 11px;
+  color: var(--pp-text-2);
+  font-family: var(--pp-mono);
+}
+
+.pp-tag.secret {
+  background: var(--pp-danger-soft);
+  color: #b91c1c;
+  margin-left: 6px;
+}
+
+.pp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--pp-muted-soft);
+  font-size: 11px;
+  color: #4b5563;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.pp-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.pp-pill.ok {
+  background: var(--pp-ok-soft);
+  color: var(--pp-ok);
+}
+
+.pp-pill.warn {
+  background: var(--pp-warn-soft);
+  color: var(--pp-warn);
+}
+
+.pp-pill.danger {
+  background: var(--pp-danger-soft);
+  color: var(--pp-danger);
+}
+
+.pp-pill.info {
+  background: var(--pp-primary-soft);
+  color: var(--pp-primary);
+}
+
+/* ---------- 渠道卡片 ---------- */
+
+.pp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+/*
+ * VCard 内部布局。VCard 自己已经给出边框 / 圆角 / 内边距，
+ * 这里只补纵向间距，避免再叠一层卡片容器（两层边框是"丑"的常见来源）。
+ */
+.pp-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pp-grid .is-disabled .pp-card-body {
+  opacity: 0.62;
+}
+
+.pp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pp-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--pp-radius);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.pp-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pp-card-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pp-card-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--pp-text-2);
+  min-height: 38px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pp-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pp-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* 密钥配置进度条 */
+.pp-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--pp-muted-soft);
+  overflow: hidden;
+}
+
+.pp-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pp-primary);
+  transition: width 0.25s;
+}
+
+/* ---------- 表格 ---------- */
+
+.pp-table-wrap {
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius);
+  background: var(--pp-surface);
+  box-shadow: var(--pp-shadow);
+  overflow-x: auto;
+}
+
+.pp-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pp-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--pp-surface-2);
+  color: var(--pp-text-2);
+  font-weight: 500;
+  font-size: 12px;
+  border-bottom: 1px solid var(--pp-border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pp-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.pp-table tbody tr {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.pp-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.pp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.pp-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--pp-mono);
+  font-size: 12px;
+}
+
+.pp-provider {
+  font-weight: 500;
+}
+
+.pp-method {
+  font-size: 11px;
+  color: var(--pp-text-3);
+}
+
+.pp-muted {
+  color: var(--pp-text-3);
+}
+
+/* 行内复制按钮 */
+.pp-copy {
+  border: none;
+  background: transparent;
+  color: var(--pp-text-3);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.pp-copy:hover {
+  color: var(--pp-primary);
+  background: var(--pp-primary-soft);
+}
+
+/* ---------- 分页 ---------- */
+
+.pp-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid #f3f4f6;
+  font-size: 12px;
+  color: var(--pp-text-2);
+  flex-wrap: wrap;
+}
+
+.pp-pager-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 提示 / 骨架 ---------- */
+
+.pp-hint {
+  font-size: 13px;
+  color: var(--pp-text-3);
+}
+
+/* 骨架屏 */
+.pp-skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--pp-muted-soft);
+  border-radius: var(--pp-radius);
+}
+
+.pp-skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: pp-shimmer 1.3s infinite;
+}
+
+@keyframes pp-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 交易列表骨架：VCard 内边距已由组件提供，这里只给行高 */
+.pp-skel-body {
+  padding: 10px 4px;
+}
+
+.pp-skel-row {
+  height: 42px;
+}
+
+/* ---------- 抽屉 ---------- */
+
+.pp-drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 60;
+  animation: pp-fade 0.16s ease-out;
+}
+
+@keyframes pp-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.pp-drawer {
+  width: min(560px, 94vw);
+  height: 100%;
+  background: var(--pp-surface);
+  display: flex;
+  flex-direction: column;
+  animation: pp-slide 0.2s ease-out;
+  box-shadow: var(--pp-shadow-pop);
+}
+
+@keyframes pp-slide {
+  from {
+    transform: translateX(30px);
+    opacity: 0.6;
+  }
+}
+
+.pp-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--pp-border);
+  flex: none;
+}
+
+.pp-drawer-head h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.pp-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pp-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--pp-border);
+  flex: none;
+  background: var(--pp-surface);
+}
+
+/* ---------- 表单 ---------- */
+
+.pp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pp-field-label {
+  font-size: 13px;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pp-field-label em {
+  color: #ef4444;
+  font-style: normal;
+  margin-left: 2px;
+}
+
+.pp-field-miss {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--pp-danger);
+}
+
+.pp-field-wrap {
+  position: relative;
+}
+
+.pp-field-wrap .eye {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--pp-text-3);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.pp-field-wrap .eye:hover {
+  color: var(--pp-primary);
+}
+
+.pp-input {
+  padding: 7px 10px;
+  border: 1px solid var(--pp-border-strong);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--pp-surface);
+  color: var(--pp-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pp-input:focus {
+  border-color: var(--pp-primary);
+  box-shadow: 0 0 0 3px rgb(var(--colors-primary, 76 203 160) / 0.12);
+}
+
+.pp-textarea {
+  resize: vertical;
+  font-family: var(--pp-mono);
+  line-height: 1.55;
+}
+
+/* textarea 字段的「从文件读取」入口 */
+.pp-file-btn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.pp-file-btn:hover {
+  border-color: var(--pp-primary);
+  color: var(--pp-primary);
+  background: var(--pp-primary-soft);
+}
+
+.pp-file-hint {
+  font-size: 11px;
+  color: #16a34a;
+  line-height: 1.5;
+}
+
+.pp-field-help {
+  font-size: 11px;
+  color: var(--pp-text-3);
+  line-height: 1.5;
+}
+
+/* ---------- 详情抽屉字段列表 ---------- */
+
+.pp-detail-grid {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  row-gap: 10px;
+  column-gap: 12px;
+  font-size: 13px;
+  align-items: baseline;
+}
+
+.pp-detail-grid dt {
+  color: var(--pp-text-2);
+  font-size: 12px;
+}
+
+.pp-detail-grid dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+/* 时间轴 */
+.pp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 4px;
+}
+
+.pp-timeline li {
+  position: relative;
+  padding: 0 0 14px 18px;
+  font-size: 12.5px;
+  color: var(--pp-text-2);
+}
+
+.pp-timeline li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pp-border-strong);
+}
+
+.pp-timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.pp-timeline li.done::before {
+  background: var(--pp-primary);
+}
+
+.pp-timeline .t {
+  color: var(--pp-text-3);
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+/* ---------- 弹窗确认 ---------- */
+
+.pp-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  animation: pp-fade 0.16s ease-out;
+}
+
+.pp-modal {
+  width: min(420px, 92vw);
+  background: var(--pp-surface);
+  border-radius: 12px;
+  box-shadow: var(--pp-shadow-pop);
+  padding: 20px 22px;
+  animation: pp-pop 0.18s ease-out;
+}
+
+@keyframes pp-pop {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+
+.pp-modal h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.pp-modal .msg {
+  font-size: 13px;
+  color: var(--pp-text-2);
+  line-height: 1.6;
+  margin: 0 0 12px;
+  word-break: break-all;
+}
+
+.pp-modal .remark {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--pp-border-strong);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 58px;
+  outline: none;
+  margin-bottom: 14px;
+  font-family: inherit;
+}
+
+.pp-modal .remark:focus {
+  border-color: var(--pp-primary);
+}
+
+.pp-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ---------- 人工审核（凭证 / 审核信息） ---------- */
+
+.pp-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--pp-border);
+}
+
+.pp-block h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pp-text);
+}
+
+.pp-link {
+  color: var(--pp-primary);
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px solid rgb(var(--colors-primary, 76 203 160) / 0.35);
+}
+
+.pp-link:hover {
+  border-bottom-color: var(--pp-primary);
+}
+
+/* ---------- 精修补充：可达性 / 提示条 / 响应式 ---------- */
+
+/* 表格行整行可点，键盘也要能看到焦点在哪一行 */
+.pp-table tbody tr:focus-visible {
+  outline: 2px solid var(--pp-primary);
+  outline-offset: -2px;
+}
+
+/* 未保存提示：贴在抽屉底部按钮左侧 */
+.pp-unsaved {
+  margin-right: auto;
+  align-self: center;
+  font-size: 12px;
+  color: var(--pp-warn);
+}
+
+/* 表单骨架：配置项加载中的占位 */
+.pp-form-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 表格里的复制按钮跟在文本后面，不要撑高行 */
+.pp-table .pp-copy {
+  margin-left: 4px;
+  vertical-align: baseline;
+}
+
+/* 中等屏：工具条换行，搜索框吃掉剩余宽度 */
+@media (max-width: 1024px) {
+  .pp-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .pp-toolbar .pp-search {
+    flex: 1 1 220px;
+  }
+}
+
+/* 窄屏：两列统计、抽屉全宽、Tab 横向滚动 */
+@media (max-width: 720px) {
+  .pp-page {
+    padding: 12px 12px 40px;
+  }
+
+  .pp-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .pp-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pp-tabs {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .pp-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pp-drawer {
+    width: 100vw;
+  }
+
+  .pp-detail-grid {
+    grid-template-columns: 84px 1fr;
+  }
+
+  .pp-drawer-body,
+  .pp-drawer-head,
+  .pp-drawer-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .pp-pager {
+    justify-content: center;
+  }
+}

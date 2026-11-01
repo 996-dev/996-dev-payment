@@ -1,0 +1,12 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'pangu-payment'
+
+// 共享 Java API 模块：发布坐标 run.pangu.payment:pangu-payment-api
+// 只含扩展点与 DTO，供其他插件 compileOnly 引用。
+include 'api'

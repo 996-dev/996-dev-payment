@@ -1,0 +1,51 @@
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: pangu-payment-settings
+spec:
+  forms:
+    - group: api
+      label: 接口对接
+      formSchema:
+        - $formkit: password
+          name: apiKeys
+          label: API Key
+          help: 业务系统调用支付 API 时放在请求头 X-API-Key。多个用英文逗号分隔，留空则拒绝所有写操作。
+          placeholder: 例如 8f3c1d2e9a7b4c60
+        - $formkit: number
+          name: defaultExpireMinutes
+          label: 会话有效期（分钟）
+          value: 30
+          min: 1
+          max: 1440
+          help: 创建支付会话时的默认有效期，超时后自动视为过期。
+
+    - group: security
+      label: 安全策略
+      formSchema:
+        - $formkit: checkbox
+          name: allowAnonymousRead
+          label: 允许匿名查询支付状态
+          value: false
+          help: 关闭后，查询支付会话也需要携带 API Key（渠道回调不受影响）。
+        - $formkit: checkbox
+          name: allowManualMarkPaid
+          label: 允许后台手工核销
+          value: true
+          help: 人工确认与银行转账渠道依赖此开关完成核销，关闭后只能等待渠道回调。
+
+    - group: notify
+      label: 通知
+      formSchema:
+        - $formkit: text
+          name: bizNotifyHeader
+          label: 业务通知附加请求头
+          placeholder: 例如 X-Sign-Source:pangu-payment
+          help: 支付成功后向业务方 notifyUrl 发起 POST 时附带的请求头，格式 key:value，便于业务方校验来源。
+        - $formkit: number
+          name: notifyRetryTimes
+          label: 业务通知重试次数
+          value: 3
+          min: 0
+          max: 10
+          help: 业务方返回非 2xx 时的重试次数。

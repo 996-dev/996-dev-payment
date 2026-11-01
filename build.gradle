@@ -1,0 +1,99 @@
+plugins {
+    id 'java'
+    id 'io.freefair.lombok' version '9.2.0'
+    id 'run.halo.plugin.devtools' version '0.6.2'
+}
+
+group = 'run.pangu.payment'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation platform('run.halo.tools.platform:plugin:2.27.1')
+    compileOnly 'run.halo.app:api'
+
+    // 共享 API 模块：扩展点接口与 DTO 会被打进本插件 jar，
+    // 其他插件 compileOnly 依赖同一份契约，运行时由本插件提供类型。
+    implementation project(':api')
+
+    // ===== 支付渠道 SDK =====
+    implementation 'com.alipay.sdk:alipay-sdk-java-v3:3.1.78.ALL'
+    implementation 'com.github.wechatpay-apiv3:wechatpay-java:0.2.17'
+    implementation 'com.stripe:stripe-java:33.2.0'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.85'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.85'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'run.halo.app:api'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+halo {
+    version = '2.27.1'
+}
+
+// 支付宝/微信/BouncyCastle 等 SDK 的 jar 自带 JAR 签名（META-INF/*.SF、*.RSA）。
+// 合并进插件 fat jar 后摘要必然失配，JVM 会抛
+// "Invalid signature file digest for Manifest main attributes" 拒绝加载，
+// 因此打包时剔除全部签名文件（META-INF/versions 下的多版本目录一并处理）。
+tasks.withType(Jar).configureEach {
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/*.EC'
+    exclude 'META-INF/versions/**/META-INF/*.SF',
+        'META-INF/versions/**/META-INF/*.DSA',
+        'META-INF/versions/**/META-INF/*.RSA',
+        'META-INF/versions/**/META-INF/*.EC'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// ===== Console 前端产物 =====
+// ui/build/dist 由 `cd ui && npm run build` 生成（vite + @halo-dev/ui-plugin-bundler-kit），
+// 产物包含 ui-plugin.json（入口清单）、main.<hash>.js 与 assets/*.css。Halo 2.27 读取清单后按需加载。Halo 从插件 jar 的
+// `console/` 目录加载后台界面，因此必须在 processResources 之后把它们
+// 铺进 build/resources/main/console，再打进 jar。
+// 前端不参与 Gradle 编译：未安装 node_modules 时该任务为空操作，不影响后端构建。
+// 目标目录跨构建累积（vite 产物按内容哈希命名，旧 main.<hash>.js 不会同名覆盖），
+// 先删再拷，保证 jar 里只有本次构建的入口文件，不混入历史版本。
+tasks.register('cleanConsoleResources', Delete) {
+    delete layout.buildDirectory.dir('resources/main/console')
+}
+
+tasks.register('processUiResources', Copy) {
+    dependsOn 'cleanConsoleResources'
+    from layout.projectDirectory.dir('ui/build/dist')
+    into layout.buildDirectory.dir('resources/main/console')
+    includeEmptyDirs = false
+}
+
+tasks.named('processResources') {
+    finalizedBy 'processUiResources'
+}
+
+tasks.named('jar') {
+    dependsOn 'processUiResources'
+    // devtools 的 fat jar 会把 runtimeClasspath 里的 jar 解压展平，
+    // 但 project(':api') 在 classpath 上是「类目录」而非 jar，
+    // 展平过程会跳过它，导致 api 包（扩展点接口）缺失、
+    // 运行时 ExtensionPointDefinition 指向的类找不到。
+    // 这里显式把 api 模块的编译产物并入 jar 根目录。
+    dependsOn ':api:classes'
+    from project(':api').sourceSets.main.output
+}

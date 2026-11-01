@@ -1,0 +1,33 @@
+{
+  "name": "pangu-payment-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Console UI for the pangu-payment Halo plugin",
+  "author": "996-dev",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/996-dev/996-dev-payment.git"
+  },
+  "scripts": {
+    "dev": "vite build --watch --mode=development",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@halo-dev/api-client": "2.21.0",
+    "@halo-dev/components": "2.21.0",
+    "@halo-dev/console-shared": "2.21.0",
+    "vue": "^3.5.17"
+  },
+  "devDependencies": {
+    "@halo-dev/ui-plugin-bundler-kit": "^2.21.1",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5",
+    "vue-router": "^4.5.1"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

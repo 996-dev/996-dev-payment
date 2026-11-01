@@ -1,0 +1,21 @@
+# 构建产物
+build/
+.gradle/
+ui/node_modules/
+ui/build/
+workplace/
+
+# 本地调试工具与演示数据（含本机地址、测试密钥）
+tools/
+tools/*.log
+tools/__pycache__/
+build/backup/
+build/demo_*.pem
+*.pem
+!docs/**
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
