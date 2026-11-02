@@ -9,9 +9,9 @@ package run.pangu.payment.api;
  *
  * <h2>使用方如何接入</h2>
  * <ol>
- *   <li>构建依赖：{@code compileOnly 'run.pangu.payment:pangu-payment-api:1.0.0'}</li>
+ *   <li>构建依赖：{@code compileOnly 'run.pangu.payment:996-dev-payment-api:1.0.0'}</li>
  *   <li>plugin.yaml 声明运行时依赖：
- *       {@code spec.pluginDependencies: { pangu-payment: ">=1.0.0" }}</li>
+ *       {@code spec.pluginDependencies: { 996-dev-payment: ">=1.0.0" }}</li>
  *   <li>注入 {@code ExtensionGetter}，按 {@link PaymentGateway} 获取实现</li>
  *   <li>订阅 {@link PaymentSucceededEvent} 完成履约</li>
  * </ol>

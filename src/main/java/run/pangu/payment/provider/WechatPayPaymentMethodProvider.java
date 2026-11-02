@@ -115,7 +115,7 @@ public class WechatPayPaymentMethodProvider implements PaymentMethodProvider {
                 request.setMchid(config.getString("merchantId", ""));
                 request.setDescription(truncate(context.subject(), 127, "支付订单"));
                 request.setOutTradeNo(context.sessionCode());
-                request.setNotifyUrl(context.callbackUrl(getProvider().getCode()));
+                request.setNotifyUrl(context.callbackUrl());
 
                 Amount amount = new Amount();
                 amount.setTotal(toCents(context.amount()));
@@ -163,6 +163,31 @@ public class WechatPayPaymentMethodProvider implements PaymentMethodProvider {
                         log.info("微信回调非成功状态: {} code={}", transaction.getTradeState(),
                             context.sessionCode());
                         return successResponse();
+                    }
+                    // 通知里的商户订单号必须就是本会话码；金额必须与会话一致。
+                    // 两者任一不符都说明通知与目标会话对不上，拒绝入账。
+                    if (transaction.getOutTradeNo() == null
+                        || !transaction.getOutTradeNo().equals(context.sessionCode())) {
+                        log.warn("微信回调商户订单号与会话不符，拒绝: expect={} actual={} code={}",
+                            context.sessionCode(), transaction.getOutTradeNo(),
+                            context.sessionCode());
+                        return ServerResponse.status(400).contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(Map.of("code", "FAIL", "message", "订单号不匹配"));
+                    }
+                    PaymentSession session = context.session();
+                    if (session != null && session.getSpec() != null
+                        && session.getSpec().getAmount() != null) {
+                        int expectedCents = toCents(session.getSpec().getAmount());
+                        int actualCents = transaction.getAmount() == null
+                            || transaction.getAmount().getTotal() == null
+                            ? -1 : transaction.getAmount().getTotal();
+                        if (expectedCents != actualCents) {
+                            log.warn("微信回调金额与会话不符，拒绝: expect={} actual={} code={}",
+                                expectedCents, actualCents, context.sessionCode());
+                            return ServerResponse.status(400)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Map.of("code", "FAIL", "message", "金额不匹配"));
+                        }
                     }
                     Map<String, Object> raw = new LinkedHashMap<>();
                     raw.put("outTradeNo", transaction.getOutTradeNo());
@@ -262,8 +287,11 @@ public class WechatPayPaymentMethodProvider implements PaymentMethodProvider {
         return trimmed;
     }
 
+    /** 回调请求体上限：微信 APIv3 通知通常不超过几 KB，超限直接拒绝。 */
+    private static final int MAX_CALLBACK_BODY_BYTES = 64 * 1024;
+
     private Mono<String> readBody(ServerWebExchange exchange) {
-        return DataBufferUtils.join(exchange.getRequest().getBody())
+        return DataBufferUtils.join(exchange.getRequest().getBody(), MAX_CALLBACK_BODY_BYTES)
             .map(buf -> {
                 byte[] bytes = new byte[buf.readableByteCount()];
                 buf.read(bytes);

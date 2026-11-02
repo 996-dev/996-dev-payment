@@ -1,9 +1,9 @@
 {
-  "name": "pangu-payment-ui",
+  "name": "996-dev-payment-ui",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Console UI for the pangu-payment Halo plugin",
+  "description": "Console UI for the 996-dev-payment Halo plugin",
   "author": "996-dev",
   "license": "GPL-3.0",
   "repository": {

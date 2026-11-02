@@ -1,7 +1,7 @@
 apiVersion: v1alpha1
 kind: Setting
 metadata:
-  name: pangu-payment-settings
+  name: 996-dev-payment-settings
 spec:
   forms:
     - group: api
@@ -18,7 +18,7 @@ spec:
           value: 30
           min: 1
           max: 1440
-          help: 创建支付会话时的默认有效期，超时后自动视为过期。
+          help: 在线渠道支付会话的默认有效期（离线渠道固定 24 小时），调用方未显式传入 expireMinutes 时生效。
 
     - group: security
       label: 安全策略
@@ -32,7 +32,7 @@ spec:
           name: allowManualMarkPaid
           label: 允许后台手工核销
           value: true
-          help: 人工确认与银行转账渠道依赖此开关完成核销，关闭后只能等待渠道回调。
+          help: 人工确认、银行转账、静态收款码渠道依赖此开关完成核销，关闭后「交易记录」页的通过/驳回操作将被拒绝。
 
     - group: notify
       label: 通知
@@ -40,7 +40,7 @@ spec:
         - $formkit: text
           name: bizNotifyHeader
           label: 业务通知附加请求头
-          placeholder: 例如 X-Sign-Source:pangu-payment
+          placeholder: 例如 X-Sign-Source:996-dev-payment
           help: 支付成功后向业务方 notifyUrl 发起 POST 时附带的请求头，格式 key:value，便于业务方校验来源。
         - $formkit: number
           name: notifyRetryTimes

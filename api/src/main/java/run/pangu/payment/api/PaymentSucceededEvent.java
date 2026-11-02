@@ -23,7 +23,7 @@ import java.time.Instant;
  * }
  * }</pre>
  *
- * <p>订阅方需在自己的 plugin.yaml 中声明 {@code pluginDependencies: { pangu-payment: ">=1.0.0" }}，
+ * <p>订阅方需在自己的 plugin.yaml 中声明 {@code pluginDependencies: { 996-dev-payment: ">=1.0.0" }}，
  * 否则无法解析本事件类型。
  *
  * @param sessionCode 会话码

@@ -5,7 +5,7 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'pangu-payment'
+rootProject.name = '996-dev-payment'
 
 // 共享 Java API 模块：发布坐标 run.pangu.payment:pangu-payment-api
 // 只含扩展点与 DTO，供其他插件 compileOnly 引用。

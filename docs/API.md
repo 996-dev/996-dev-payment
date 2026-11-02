@@ -1,6 +1,6 @@
 # 支付中心 · 开发者对接文档
 
-> 插件：`pangu-payment` 1.0.0　适配 Halo `>= 2.27.0`　API 版本 `v1alpha1`
+> 插件：`996-dev-payment` 1.0.0　适配 Halo `>= 2.27.0`　API 版本 `v1alpha1`
 >
 > 仓库：<https://github.com/996-dev/996-dev-payment>　作者：996-dev　网站：<https://www.996.tax>　协议：GPL-3.0
 >
@@ -118,7 +118,10 @@ HTTP 状态码见第 8 节。成功响应的 `code` 固定为 `0`。
 | GET | `/methods/{methodName}/config` | 读取支付方式公开配置 | 是 |
 | PUT | `/methods/{methodName}/config` | 写入支付方式配置 | 是 |
 | POST | `/methods/{methodName}/toggle` | 启停支付方式 | 是 |
-| GET/POST | `/callbacks/{provider}/{sessionCode}` | 渠道异步通知 | 否 |
+| GET/POST | `/callbacks/{sessionCode}` | 渠道异步通知 | 否 |
+
+> 回调路径只带会话码：渠道实现按会话自身的 `provider` 字段选择，
+> 回调地址无法被用来挑选其他渠道的验签逻辑。
 
 ### 3.2 后台接口（Console UI 调用，登录态）
 
@@ -333,10 +336,12 @@ Content-Type: application/json
 渠道异步通知统一入口（渠道侧配置的回调地址）：
 
 ```
-{站点地址}/apis/api.payment.pangu.tax/v1alpha1/callbacks/{provider}/{sessionCode}
+{站点地址}/apis/api.payment.pangu.tax/v1alpha1/callbacks/{sessionCode}
 ```
 
-插件按 `provider` 分发到对应实现验签，验签失败一律拒绝，金额不一致同样拒绝入账。
+插件按会话自身的 `provider` 分发到对应实现验签，验签失败一律拒绝；
+回调参数中的商户订单号、金额与会话不符同样拒绝入账；
+同一渠道交易号只入账一次（幂等）。
 各渠道返回体要求：
 
 | 渠道 | 成功响应 | 说明 |
@@ -370,7 +375,7 @@ Content-Type: application/json
 ```
 
 业务方返回任意 `2xx` 视为成功；非 `2xx` 会按后台配置的重试次数重试。
-可在后台设置「业务通知附加请求头」加一条自定义头（如 `X-Sign-Source:pangu-payment`）便于校验来源。
+可在后台设置「业务通知附加请求头」加一条自定义头（如 `X-Sign-Source:996-dev-payment`）便于校验来源。
 
 **验签建议**：业务方收到通知后，务必再用 `GET /payments/{sessionCode}/status`
 主动确认一次，不要仅凭通知内容发货。
@@ -565,8 +570,8 @@ Content-Type: application/json
 | `PaymentSession` | `extensions` 表 | 支付会话 |
 | `PaymentTransaction` | `extensions` 表 | 交易流水，只追加 |
 | `PaymentMethod` | `extensions` 表 | 支付方式实例 |
-| ConfigMap `pangu-payment-config` | `extensions` 表 | 渠道公开配置 |
-| Secret `pangu-payment-secret` | `extensions` 表 | 渠道密钥 |
+| ConfigMap `996-dev-payment-config` | `extensions` 表 | 渠道公开配置 |
+| Secret `996-dev-payment-secret` | `extensions` 表 | 渠道密钥 |
 
 ### 11.2 对账建议
 
@@ -620,7 +625,7 @@ WHERE name LIKE '/registry/payment.pangu.tax/paymentsessions/%'
 | 业务关联 | `bizType + bizNo + bizData` | 支付内核不绑定订单模型，会员、商城、内容付费、打赏都能直接用 |
 | 配置存储 | ConfigMap + Secret 分流 | 密钥不以明文进扩展资源，查询接口只回掩码 |
 | 开放鉴权 | `X-API-Key` | 面向服务端对接，不依赖用户登录态 |
-| 回调入口 | 统一 `/callbacks/{provider}/{code}` | 一个入口按渠道分发，新增渠道不用加路由 |
+| 回调入口 | 统一 `/callbacks/{code}` | 一个入口按会话渠道分发，新增渠道不用加路由 |
 | 场景选择 | 调用方显式传 `scene` | 不再根据 User-Agent 猜，行为可预测 |
 | 配置读取 | 每次下单实时读 ConfigMap/Secret | 改配置立即生效，不需要缓存失效通知 |
 | 到账确认 | 回调 / 查单 / 人工核销三路收敛到一个事件 | 业务方只需监听 `PaymentSucceededEvent` |

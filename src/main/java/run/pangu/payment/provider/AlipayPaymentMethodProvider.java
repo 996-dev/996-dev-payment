@@ -118,7 +118,7 @@ public class AlipayPaymentMethodProvider implements PaymentMethodProvider {
                 model.setOutTradeNo(context.sessionCode());
                 model.setTotalAmount(context.amount().toPlainString());
                 model.setSubject(truncate(context.subject(), 256, "支付订单"));
-                model.setNotifyUrl(context.callbackUrl(getProvider().getCode()));
+                model.setNotifyUrl(context.callbackUrl());
                 model.setTimeoutExpress("30m");
                 AlipayTradePrecreateResponseModel resp = api.precreate(model);
                 String qrCode = resp.getQrCode();
@@ -139,30 +139,70 @@ public class AlipayPaymentMethodProvider implements PaymentMethodProvider {
             }).subscribeOn(Schedulers.boundedElastic()));
     }
 
+    /**
+     * 支付宝异步通知处理。
+     *
+     * <p>支付宝以 POST form（application/x-www-form-urlencoded）发送异步通知，
+     * 查询参数兼容保留；签名原文以合并后的参数为准。
+     *
+     * <p>除验签外还做三层校验，防止伪造或张冠李戴的回调：
+     * 支付宝公钥未配置直接拒绝（空公钥验签必然通过或失去意义）；
+     * {@code out_trade_no} 必须等于本会话码；{@code total_amount} 必须等于会话金额。
+     */
     @Override
     public Mono<ServerResponse> handleCallback(PaymentCallbackContext context,
         ServerWebExchange exchange) {
-        Map<String, String> params = flatten(exchange.getRequest().getQueryParams());
-        return configService.get(methodName(context.method()))
-            .flatMap(config -> Mono.fromCallable(() -> {
-                String alipayPublicKey = normalizePem(config.getString("alipayPublicKey", ""));
-                return AlipaySignature.verifyV1(params, alipayPublicKey, CHARSET, SIGN_TYPE);
-            }).subscribeOn(Schedulers.boundedElastic()).flatMap(valid -> {
-                if (!valid) {
-                    log.warn("支付宝回调验签失败: code={}", context.sessionCode());
-                    return ServerResponse.badRequest()
-                        .contentType(MediaType.TEXT_PLAIN).bodyValue("failure");
-                }
-                String tradeStatus = params.get("trade_status");
-                if (!"TRADE_SUCCESS".equals(tradeStatus) && !"TRADE_FINISHED".equals(tradeStatus)) {
-                    return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
-                        .bodyValue("success");
-                }
-                Map<String, Object> raw = new LinkedHashMap<>(params);
-                return stateService.markPaid(context.session(), params.get("trade_no"), raw)
-                    .then(ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
-                        .bodyValue("success"));
-            }))
+        return exchange.getFormData()
+            .defaultIfEmpty(new org.springframework.util.LinkedMultiValueMap<>())
+            .map(form -> {
+                Map<String, String> params = flatten(exchange.getRequest().getQueryParams());
+                flatten(form).forEach(params::putIfAbsent);
+                return params;
+            })
+            .flatMap(params -> configService.get(methodName(context.method()))
+                .flatMap(config -> Mono.fromCallable(() -> {
+                    String alipayPublicKey = normalizePem(config.getString("alipayPublicKey", ""));
+                    if (alipayPublicKey.isBlank()) {
+                        // 未配置验签公钥时无法确认来源，宁可拒绝也不放行
+                        return false;
+                    }
+                    return AlipaySignature.verifyV1(params, alipayPublicKey, CHARSET, SIGN_TYPE);
+                }).subscribeOn(Schedulers.boundedElastic()).flatMap(valid -> {
+                    if (!valid) {
+                        log.warn("支付宝回调验签失败: code={}", context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("failure");
+                    }
+                    String tradeStatus = params.get("trade_status");
+                    if (!"TRADE_SUCCESS".equals(tradeStatus)
+                        && !"TRADE_FINISHED".equals(tradeStatus)) {
+                        return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
+                            .bodyValue("success");
+                    }
+                    PaymentSession session = context.session();
+                    String outTradeNo = params.get("out_trade_no");
+                    if (outTradeNo == null
+                        || !outTradeNo.equals(context.sessionCode())) {
+                        log.warn("支付宝回调商户订单号与会话不符，拒绝: expect={} actual={} code={}",
+                            context.sessionCode(), outTradeNo, context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("failure");
+                    }
+                    String totalAmount = params.get("total_amount");
+                    if (session != null && session.getSpec() != null
+                        && session.getSpec().getAmount() != null
+                        && (totalAmount == null || session.getSpec().getAmount()
+                            .compareTo(new java.math.BigDecimal(totalAmount)) != 0)) {
+                        log.warn("支付宝回调金额与会话不符，拒绝: expect={} actual={} code={}",
+                            session.getSpec().getAmount(), totalAmount, context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("failure");
+                    }
+                    Map<String, Object> raw = new LinkedHashMap<>(params);
+                    return stateService.markPaid(context.session(), params.get("trade_no"), raw)
+                        .then(ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
+                            .bodyValue("success"));
+                })))
             .onErrorResume(e -> {
                 log.error("支付宝回调处理异常: code={}", context.sessionCode(), e);
                 return ServerResponse.status(500).contentType(MediaType.TEXT_PLAIN)

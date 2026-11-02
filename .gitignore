@@ -19,3 +19,6 @@ build/demo_*.pem
 *.iml
 .vscode/
 .DS_Store
+
+# 本地发布产物
+dist/

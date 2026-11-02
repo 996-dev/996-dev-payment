@@ -1,7 +1,7 @@
 apiVersion: plugin.halo.run/v1alpha1
 kind: Plugin
 metadata:
-  name: pangu-payment
+  name: 996-dev-payment
 spec:
   enabled: false
   requires: ">=2.27.0"
@@ -12,8 +12,8 @@ spec:
   homepage: https://github.com/996-dev/996-dev-payment
   repo: https://github.com/996-dev/996-dev-payment
   issues: https://github.com/996-dev/996-dev-payment/issues
-  settingName: pangu-payment-settings
-  configMapName: pangu-payment-configmap
+  settingName: 996-dev-payment-settings
+  configMapName: 996-dev-payment-configmap
   displayName: "支付中心"
   description: "为任意业务提供统一支付能力：支付宝、微信支付、Stripe、易支付、静态收款码、银行转账、人工确认七大渠道，支持支付会话、回调验签、主动查单、幂等下单与离线凭证人工核销，并对外开放 HTTP API 与 Java 扩展点。"
   license:

@@ -24,7 +24,7 @@ systems and Java extension points for other plugins.
   is extended after submission so money never arrives after the order has expired
 - **Tiered secret storage**: Secret fields are stored in a Halo `Secret`, public settings in a
   `ConfigMap`, and every read API returns masked values only
-- **Open API**: `X-API-Key` authentication with HMAC signing, callable from any language
+- **Open API**: `X-API-Key` authentication, callable from any language
 - **Java extension points**: Depend on the `api` module to call `PaymentGateway`, or implement
   `PaymentProviderExtension` to add your own channel
 - **Append-only ledger**: Creation, queries, callbacks, closing, receipts, and reviews each write a
@@ -44,8 +44,9 @@ systems and Java extension points for other plugins.
 
 ## Getting Started
 
-1. Download `996-dev-payment-<version>.zip` from
-   [Releases](https://github.com/996-dev/996-dev-payment/releases) and extract the plugin jar
+1. Download the plugin jar (`996-dev-payment-<version>.jar`) from
+   [Releases](https://github.com/996-dev/996-dev-payment/releases), or build it yourself as
+   described in the Development section
 2. Upload and enable it in the Halo Console under **Plugins → Install**
 3. Open **Payment Center → Channels**, enable and configure the channels you need. Private key and
    certificate fields can be loaded directly from `.pem`, `.crt`, or `.txt` files

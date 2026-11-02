@@ -23,7 +23,7 @@
 稳定契约单独放在 `api/` 子模块，发布坐标为：
 
 ```
-run.pangu.payment:pangu-payment-api:1.0.0
+run.pangu.payment:996-dev-payment-api:1.0.0
 ```
 
 模块内只有接口与 DTO，不含任何实现类，`build.gradle` 里 Halo API 与 Reactor 均为
@@ -32,9 +32,9 @@ run.pangu.payment:pangu-payment-api:1.0.0
 ### 使用方依赖配置
 
 ```groovy
-// 只编译期需要，运行时由 pangu-payment 插件提供同一份类型
+// 只编译期需要，运行时由 996-dev-payment 插件提供同一份类型
 dependencies {
-    compileOnly 'run.pangu.payment:pangu-payment-api:1.0.0'
+    compileOnly 'run.pangu.payment:996-dev-payment-api:1.0.0'
 }
 ```
 
@@ -42,7 +42,7 @@ dependencies {
 # plugin.yaml
 spec:
   pluginDependencies:
-    pangu-payment: ">=1.0.0"
+    996-dev-payment: ">=1.0.0"
 ```
 
 两点硬要求：
@@ -272,7 +272,7 @@ X-API-Key: <后台「插件 → 支付中心 → 设置 → 接口对接」中�
 apiVersion: plugin.halo.run/v1alpha1
 kind: ExtensionPointDefinition
 metadata:
-  name: pangu-payment-gateway
+  name: 996-dev-payment-gateway
 spec:
   className: run.pangu.payment.api.PaymentGateway
   type: SINGLETON
@@ -280,7 +280,7 @@ spec:
 apiVersion: plugin.halo.run/v1alpha1
 kind: ExtensionPointDefinition
 metadata:
-  name: pangu-payment-provider
+  name: 996-dev-payment-provider
 spec:
   className: run.pangu.payment.api.PaymentProviderExtension
   type: MULTI_INSTANCE

@@ -116,7 +116,7 @@ public class StripePaymentMethodProvider implements PaymentMethodProvider {
                         ? context.session().getSpec().getCurrency().toLowerCase() : "cny";
                 String successUrl = context.returnUrl() != null && !context.returnUrl().isBlank()
                     ? context.returnUrl()
-                    : context.callbackUrl(getProvider().getCode());
+                    : context.callbackUrl();
 
                 SessionCreateParams params = SessionCreateParams.builder()
                     .setMode(SessionCreateParams.Mode.PAYMENT)
@@ -150,10 +150,13 @@ public class StripePaymentMethodProvider implements PaymentMethodProvider {
             }).subscribeOn(Schedulers.boundedElastic()));
     }
 
+    /** 回调请求体上限：Stripe webhook 通常不超过几十 KB，超限直接拒绝。 */
+    private static final int MAX_CALLBACK_BODY_BYTES = 256 * 1024;
+
     @Override
     public Mono<ServerResponse> handleCallback(PaymentCallbackContext context,
         ServerWebExchange exchange) {
-        return DataBufferUtils.join(exchange.getRequest().getBody())
+        return DataBufferUtils.join(exchange.getRequest().getBody(), MAX_CALLBACK_BODY_BYTES)
             .map(buf -> {
                 byte[] bytes = new byte[buf.readableByteCount()];
                 buf.read(bytes);
@@ -192,6 +195,28 @@ public class StripePaymentMethodProvider implements PaymentMethodProvider {
         if (checkout == null || !"paid".equals(checkout.getPaymentStatus())) {
             log.info("Stripe 会话未支付完成，忽略: code={}", context.sessionCode());
             return acknowledged();
+        }
+        // 下单时把 sessionCode 写进了 metadata：回调里的会话码必须与目标会话一致，
+        // 金额必须与订单一致，防止把 A 会话的通知记到 B 会话头上。
+        String paidSessionCode = checkout.getMetadata() == null
+            ? null : checkout.getMetadata().get("sessionCode");
+        if (paidSessionCode == null || !paidSessionCode.equals(context.sessionCode())) {
+            log.warn("Stripe 回调会话码不匹配，拒绝: expect={} actual={} code={}",
+                context.sessionCode(), paidSessionCode, context.sessionCode());
+            return ServerResponse.status(400).contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("error", "session code mismatch"));
+        }
+        PaymentSession session = context.session();
+        if (session != null && session.getSpec() != null
+            && session.getSpec().getAmount() != null) {
+            long expected = toMinorUnit(session.getSpec().getAmount());
+            long actual = checkout.getAmountTotal() == null ? -1 : checkout.getAmountTotal();
+            if (expected != actual) {
+                log.warn("Stripe 回调金额与会话不符，拒绝: expect={} actual={} code={}",
+                    expected, actual, context.sessionCode());
+                return ServerResponse.status(400).contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("error", "amount mismatch"));
+            }
         }
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("eventId", event.getId());

@@ -33,8 +33,8 @@ import run.pangu.payment.extension.PaymentMethodConfig;
 @RequiredArgsConstructor
 public class PaymentConfigService {
 
-    public static final String CONFIGMAP_NAME = "pangu-payment-config";
-    public static final String SECRET_NAME = "pangu-payment-secret";
+    public static final String CONFIGMAP_NAME = "996-dev-payment-config";
+    public static final String SECRET_NAME = "996-dev-payment-secret";
 
     /**
      * 插件类加载器与 Halo 主容器隔离，注入不到主容器的 {@code ObjectMapper}，

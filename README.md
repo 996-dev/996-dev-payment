@@ -14,7 +14,7 @@
 - **三路确认收敛为一个事件**：渠道回调验签、主动查单补偿、离线凭证人工核销，最终只发出一次 `PaymentSucceededEvent`
 - **离线渠道审核闭环**：付款人提交凭证 → 待审核 → 后台核销或驳回，记录审核人、时间与依据；提交凭证后有效期自动顺延，不会出现「钱到了单却过期」
 - **密钥分级存储**：密钥字段落 Halo `Secret`，公开配置落 `ConfigMap`，所有读接口只返回掩码
-- **开放 API**：`X-API-Key` 鉴权配合 HMAC 签名，任意语言的外部系统均可接入
+- **开放 API**：`X-API-Key` 鉴权，任意语言的外部系统均可接入
 - **Java 扩展点**：依赖 `api` 模块直接调用 `PaymentGateway`，或实现 `PaymentProviderExtension` 接入自建渠道
 - **只追加流水**：下单、查单、回调、关单、凭证、审核各写一条交易记录，可对账可追溯
 - **控制台界面**：基于 `@halo-dev/components` 与 Halo 设计令牌实现，自动跟随主题明暗
@@ -31,7 +31,7 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/996-dev/996-dev-payment/releases) 下载 `996-dev-payment-<version>.zip`，解压取出其中的插件 jar
+1. 在 [Releases](https://github.com/996-dev/996-dev-payment/releases) 下载插件 jar（`996-dev-payment-<version>.jar`），或按下方「开发」小节自行构建
 2. Halo 后台「插件 → 安装」上传该 jar 并启用
 3. 进入「支付中心 → 渠道管理」，启用并配置需要使用的渠道（私钥、证书等字段支持从 `.pem`、`.crt`、`.txt` 文件直接读取）
 4. 在「插件 → 支付中心 → 设置 → 接口对接」生成 API Key，业务系统凭 `X-API-Key` 调用支付接口

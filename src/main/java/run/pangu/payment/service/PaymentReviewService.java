@@ -46,6 +46,17 @@ public class PaymentReviewService {
     private final PaymentStateService stateService;
     private final ReactiveExtensionClient client;
     private final PaymentProviderRegistry registry;
+    private final run.halo.app.plugin.ReactiveSettingFetcher settingFetcher;
+
+    /** 插件设置「安全策略 → 允许后台手工核销」，默认开启。 */
+    private Mono<Boolean> manualMarkPaidAllowed() {
+        return settingFetcher.fetch("security",
+                run.pangu.payment.setting.SecuritySetting.class)
+            .map(run.pangu.payment.setting.SecuritySetting::getAllowManualMarkPaid)
+            .map(Boolean.TRUE::equals)
+            .defaultIfEmpty(true)
+            .onErrorResume(e -> Mono.just(true));
+    }
 
     /** 该渠道是否需要人工审核。判定口径见 {@link ManualChannels}，与下单流程共用。 */
     public boolean requiresReview(String provider) {
@@ -137,6 +148,17 @@ public class PaymentReviewService {
             return Mono.error(new PaymentService.PaymentException("REMARK_REQUIRED",
                 "请填写核销依据，例如银行流水号或对账说明"));
         }
+        return manualMarkPaidAllowed().flatMap(allowed -> {
+            if (!allowed) {
+                return Mono.error(new PaymentService.PaymentException("MANUAL_MARK_PAID_DISABLED",
+                    "后台手工核销已被关闭（插件设置 → 安全策略），人工类渠道请等待渠道回调或开启该开关"));
+            }
+            return approveInternal(sessionCode, reviewer, remark);
+        });
+    }
+
+    private Mono<PaymentSession> approveInternal(String sessionCode, String reviewer,
+        String remark) {
         return paymentService.getByCode(sessionCode)
             .flatMap(session -> {
                 var status = session.getStatus();

@@ -12,8 +12,8 @@ import run.halo.app.extension.GVK;
  *
  * <p>渠道密钥不随实体落库，按 Halo 安全规范拆分为双存储：
  * <ul>
- *   <li>非敏感配置 → ConfigMap {@code pangu-payment-config}，键为 {@code metadata.name}</li>
- *   <li>密钥类字段 → Secret {@code pangu-payment-secret}，键同上</li>
+ *   <li>非敏感配置 → ConfigMap {@code 996-dev-payment-config}，键为 {@code metadata.name}</li>
+ *   <li>密钥类字段 → Secret {@code 996-dev-payment-secret}，键同上</li>
  * </ul>
  * 两类配置都以本资源的 {@code metadata.name} 作为键，运行时按名合并读取；
  * 表单字段、校验规则与下单参数统一由渠道实现定义。

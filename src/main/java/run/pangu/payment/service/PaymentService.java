@@ -40,12 +40,26 @@ import run.pangu.payment.provider.PaymentMethodProvider;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class PaymentService {
 
     private final ReactiveExtensionClient client;
     private final PaymentProviderRegistry registry;
     private final PaymentStateService stateService;
+    private final run.halo.app.plugin.ReactiveSettingFetcher settingFetcher;
+    private final org.springframework.beans.factory.ObjectProvider<run.halo.app.infra.ExternalUrlSupplier>
+        externalUrlSupplier;
+
+    public PaymentService(ReactiveExtensionClient client, PaymentProviderRegistry registry,
+        PaymentStateService stateService,
+        run.halo.app.plugin.ReactiveSettingFetcher settingFetcher,
+        org.springframework.beans.factory.ObjectProvider<run.halo.app.infra.ExternalUrlSupplier>
+            externalUrlSupplier) {
+        this.client = client;
+        this.registry = registry;
+        this.stateService = stateService;
+        this.settingFetcher = settingFetcher;
+        this.externalUrlSupplier = externalUrlSupplier;
+    }
 
     /**
      * 创建支付会话并触发渠道下单。
@@ -133,40 +147,59 @@ public class PaymentService {
 
     private Mono<PaymentSession> createSession(PaymentCreateRequest req, PaymentMethod method,
         PaymentMethodProvider provider, String bizType) {
-        PaymentSession session = new PaymentSession();
-        Metadata metadata = new Metadata();
-        metadata.setName("ps-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20));
-        session.setMetadata(metadata);
+        return defaultExpireMinutes(provider).flatMap(resolvedMinutes -> {
+            PaymentSession session = new PaymentSession();
+            Metadata metadata = new Metadata();
+            metadata.setName("ps-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20));
+            session.setMetadata(metadata);
 
-        // 离线渠道（人工确认/银行转账/静态收款码）要留足线下转账时间，
-        // 统一按 30 分钟会给出一张"还没走到银行就过期"的单。
-        int expireMinutes = req.getExpireMinutes() == null || req.getExpireMinutes() <= 0
-            ? ManualChannels.defaultExpireMinutes(provider) : req.getExpireMinutes();
+            // 调用方显式传入的有效期优先，否则用渠道默认/插件设置
+            int expireMinutes = req.getExpireMinutes() == null || req.getExpireMinutes() <= 0
+                ? resolvedMinutes : req.getExpireMinutes();
+            PaymentSession.PaymentSessionSpec spec = new PaymentSession.PaymentSessionSpec();
+            spec.setSessionCode(generateCode());
+            spec.setProvider(provider.getProvider().getCode());
+            spec.setMethodName(method.getMetadata().getName());
+            spec.setBizType(bizType);
+            spec.setBizNo(req.getBizNo());
+            spec.setAmount(req.getAmount().setScale(2, java.math.RoundingMode.HALF_UP));
+            spec.setCurrency(req.getCurrency() == null || req.getCurrency().isBlank()
+                ? "CNY" : req.getCurrency().toUpperCase());
+            spec.setSubject(req.getSubject() == null || req.getSubject().isBlank()
+                ? "支付订单 " + req.getBizNo() : req.getSubject());
+            spec.setDescription(req.getDescription());
+            spec.setReturnUrl(req.getReturnUrl());
+            spec.setNotifyUrl(req.getNotifyUrl());
+            spec.setIdempotencyKey(req.getIdempotencyKey());
+            spec.setExpiresAt(Instant.now().plus(expireMinutes, ChronoUnit.MINUTES));
+            session.setSpec(spec);
 
-        PaymentSession.PaymentSessionSpec spec = new PaymentSession.PaymentSessionSpec();
-        spec.setSessionCode(generateCode());
-        spec.setProvider(provider.getProvider().getCode());
-        spec.setMethodName(method.getMetadata().getName());
-        spec.setBizType(bizType);
-        spec.setBizNo(req.getBizNo());
-        spec.setAmount(req.getAmount().setScale(2, java.math.RoundingMode.HALF_UP));
-        spec.setCurrency(req.getCurrency() == null || req.getCurrency().isBlank()
-            ? "CNY" : req.getCurrency().toUpperCase());
-        spec.setSubject(req.getSubject() == null || req.getSubject().isBlank()
-            ? "支付订单 " + req.getBizNo() : req.getSubject());
-        spec.setDescription(req.getDescription());
-        spec.setReturnUrl(req.getReturnUrl());
-        spec.setNotifyUrl(req.getNotifyUrl());
-        spec.setIdempotencyKey(req.getIdempotencyKey());
-        spec.setExpiresAt(Instant.now().plus(expireMinutes, ChronoUnit.MINUTES));
-        session.setSpec(spec);
+            PaymentSession.PaymentSessionStatus status = new PaymentSession.PaymentSessionStatus();
+            status.setPhase(PaymentSession.Phase.PENDING);
+            status.setMessage("待支付");
+            session.setStatus(status);
 
-        PaymentSession.PaymentSessionStatus status = new PaymentSession.PaymentSessionStatus();
-        status.setPhase(PaymentSession.Phase.PENDING);
-        status.setMessage("待支付");
-        session.setStatus(status);
+            return client.create(session);
+        });
+    }
 
-        return client.create(session);
+    /**
+     * 会话默认有效期（分钟）。
+     *
+     * <p>离线渠道固定给一天；在线渠道读插件设置「会话有效期」，
+     * 未配置时回落到 {@link ManualChannels#ONLINE_EXPIRE_MINUTES}。
+     * 调用方显式传入 {@code expireMinutes} 时本方法不会被调用。
+     */
+    private Mono<Integer> defaultExpireMinutes(PaymentMethodProvider provider) {
+        if (ManualChannels.isManual(provider)) {
+            return Mono.just(ManualChannels.DEFAULT_EXPIRE_MINUTES);
+        }
+        return settingFetcher.fetch("api", run.pangu.payment.setting.ApiSetting.class)
+            .map(run.pangu.payment.setting.ApiSetting::getDefaultExpireMinutes)
+            .filter(minutes -> minutes != null && minutes > 0)
+            .map(minutes -> Math.toIntExact(minutes))
+            .onErrorResume(e -> Mono.just(ManualChannels.ONLINE_EXPIRE_MINUTES))
+            .defaultIfEmpty(ManualChannels.ONLINE_EXPIRE_MINUTES);
     }
 
     /** 调用渠道下单并把载荷回写到会话。 */
@@ -330,28 +363,50 @@ public class PaymentService {
             });
     }
 
-    /** 回调入口：按渠道分发到对应实现的 handleCallback。 */
-    public Mono<ServerResponse> handleCallback(String providerCode, String sessionCode,
-        ServerWebExchange exchange) {
+    /**
+     * 回调入口：按会话所属渠道分发到对应实现的 handleCallback。
+     *
+     * <p>安全要点：渠道实现一律取自会话的 {@code spec.provider}，
+     * 而不是回调地址中的任何路径片段——回调地址由外部构造，
+     * 若按它选择验签实现，攻击者就能给「无密钥渠道」的会话
+     * 套上其他渠道的验签逻辑（例如用空密钥伪造易支付 MD5 签名）。
+     * 会话码来自路径，实现内部还须校验回调参数中的商户订单号、
+     * 金额与该会话一致。
+     */
+    public Mono<ServerResponse> handleCallback(String sessionCode, ServerWebExchange exchange) {
         return getByCode(sessionCode)
-            .flatMap(session -> resolveMethod(session)
-                .flatMap(method -> registry.find(providerCode)
-                    .map(provider -> provider.handleCallback(PaymentCallbackContext.builder()
-                            .session(session)
-                            .method(method)
-                            .bizType(session.getSpec().getBizType())
-                            .bizNo(session.getSpec().getBizNo())
-                            .build(), exchange)
-                        .onErrorResume(e -> {
-                            log.error("回调处理异常: provider={} code={}", providerCode,
-                                sessionCode, e);
-                            return ServerResponse.status(500)
-                                .bodyValue(Map.of("code", "CALLBACK_ERROR",
-                                    "message", "回调处理失败"));
-                        }))
-                    .orElseGet(() -> ServerResponse.status(404)
-                        .bodyValue(Map.of("code", "CHANNEL_NOT_FOUND",
-                            "message", "未知支付渠道: " + providerCode)))));
+            .flatMap(session -> dispatchCallback(session, exchange, sessionCode))
+            // getByCode 空时抛 PaymentException(SESSION_NOT_FOUND)：显式 404，
+            // 避免未映射异常被 WebFlux 兜底成 500（渠道会无意义重试）。
+            .onErrorResume(PaymentService.PaymentException.class,
+                e -> "SESSION_NOT_FOUND".equals(e.getCode())
+                    ? ServerResponse.status(404)
+                        .bodyValue(Map.of("code", "SESSION_NOT_FOUND",
+                            "message", "支付会话不存在"))
+                    : Mono.error(e));
+    }
+
+    /** 按会话自身渠道分发回调；渠道不存在时 404。 */
+    private Mono<ServerResponse> dispatchCallback(PaymentSession session,
+        ServerWebExchange exchange, String sessionCode) {
+        return resolveMethod(session)
+            .flatMap(method -> registry.find(session.getSpec().getProvider())
+                .map(provider -> provider.handleCallback(PaymentCallbackContext.builder()
+                        .session(session)
+                        .method(method)
+                        .bizType(session.getSpec().getBizType())
+                        .bizNo(session.getSpec().getBizNo())
+                        .build(), exchange)
+                    .onErrorResume(e -> {
+                        log.error("回调处理异常: provider={} code={}",
+                            session.getSpec().getProvider(), sessionCode, e);
+                        return ServerResponse.status(500)
+                            .bodyValue(Map.of("code", "CALLBACK_ERROR",
+                                "message", "回调处理失败"));
+                    }))
+                .orElseGet(() -> ServerResponse.status(404)
+                    .bodyValue(Map.of("code", "CHANNEL_NOT_FOUND",
+                        "message", "未知支付渠道: " + session.getSpec().getProvider()))));
     }
 
     private Mono<PaymentMethod> resolveMethod(PaymentSession session) {
@@ -368,35 +423,53 @@ public class PaymentService {
     /**
      * 取站点外部地址。
      *
-     * <p>优先用请求的 Host 还原，兼容反向代理下的 X-Forwarded-*；
-     * 拿不到时退化为本地回环，保证回调地址总能拼出来。
+     * <p>优先级：请求的 Host（含反向代理 X-Forwarded-*）→
+     * Halo 的 {@code ExternalUrlSupplier}（站点设置中的外部访问地址，
+     * Java 扩展点下单没有请求上下文时靠它）→ 相对路径兜底。
+     * 不再回退到 {@code 127.0.0.1}：渠道服务器回调该地址必然失败，
+     * 宁可返回不带主机的路径并在日志中给出明确提示。
      */
     private java.net.URL externalUrl(ServerWebExchange exchange) {
-        try {
-            var request = exchange.getRequest();
-            String scheme = request.getHeaders().getFirst("X-Forwarded-Proto");
-            if (scheme == null || scheme.isBlank()) {
-                scheme = request.getURI().getScheme();
-            }
-            String host = request.getHeaders().getFirst("X-Forwarded-Host");
-            if (host == null || host.isBlank()) {
-                host = request.getHeaders().getHost() == null
-                    ? null : request.getHeaders().getHost().getHostName();
-                int port = request.getHeaders().getHost() == null
-                    ? -1 : request.getHeaders().getHost().getPort();
-                if (host != null && port > 0 && port != 80 && port != 443) {
-                    host = host + ":" + port;
-                }
-            }
-            String value = scheme + "://" + (host == null ? "127.0.0.1" : host);
-            return java.net.URI.create(value).toURL();
-        } catch (Exception e) {
+        if (exchange != null) {
             try {
-                return URI.create("http://127.0.0.1").toURL();
-            } catch (Exception ignored) {
-                throw new IllegalStateException(e);
+                var request = exchange.getRequest();
+                String scheme = request.getHeaders().getFirst("X-Forwarded-Proto");
+                if (scheme == null || scheme.isBlank()) {
+                    scheme = request.getURI().getScheme();
+                }
+                String host = request.getHeaders().getFirst("X-Forwarded-Host");
+                if (host == null || host.isBlank()) {
+                    host = request.getHeaders().getHost() == null
+                        ? null : request.getHeaders().getHost().getHostName();
+                    int port = request.getHeaders().getHost() == null
+                        ? -1 : request.getHeaders().getHost().getPort();
+                    if (host != null && port > 0 && port != 80 && port != 443) {
+                        host = host + ":" + port;
+                    }
+                }
+                if (host != null && !host.isBlank()) {
+                    return java.net.URI.create(scheme + "://" + host).toURL();
+                }
+            } catch (Exception e) {
+                log.warn("从请求还原站点外部地址失败", e);
             }
         }
+        // Java 扩展点下单（exchange == null）或请求头缺失：
+        // 用 Halo「设置 → 基础设置 → 外部访问地址」。
+        var supplier = externalUrlSupplier == null ? null : externalUrlSupplier.getIfAvailable();
+        if (supplier != null) {
+            java.net.URI external = supplier.get();
+            if (external != null) {
+                try {
+                    return external.toURL();
+                } catch (Exception e) {
+                    log.warn("外部访问地址配置非法: {}", external, e);
+                }
+            }
+        }
+        log.warn("无法确定站点外部地址，渠道回调地址将不带主机名；"
+            + "请在 Halo「设置 → 基础设置」中配置外部访问地址");
+        return null;
     }
 
     /** 生成对外支付码：时间戳 + 随机，长度 24，便于日志检索与人工核对。 */

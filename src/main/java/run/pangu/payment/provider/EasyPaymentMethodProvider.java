@@ -122,7 +122,7 @@ public class EasyPaymentMethodProvider implements PaymentMethodProvider {
             params.put("pid", merchantId);
             params.put("type", config.getString("type", "alipay"));
             params.put("out_trade_no", context.sessionCode());
-            params.put("notify_url", context.callbackUrl(getProvider().getCode()));
+            params.put("notify_url", context.callbackUrl());
             if (context.returnUrl() != null) {
                 params.put("return_url", context.returnUrl());
             }
@@ -140,27 +140,67 @@ public class EasyPaymentMethodProvider implements PaymentMethodProvider {
         });
     }
 
+    /**
+     * 易支付异步通知处理。
+     *
+     * <p>协议以 GET 查询参数回传，POST form 兼容保留；签名以合并后的参数为准。
+     *
+     * <p>除验签外还校验：商户密钥未配置直接拒绝（空密钥可被任何人伪造签名）；
+     * {@code out_trade_no} 必须等于本会话码；{@code money} 必须等于会话金额。
+     */
     @Override
     public Mono<ServerResponse> handleCallback(PaymentCallbackContext context,
         ServerWebExchange exchange) {
-        return configService.get(methodName(context.method()))
-            .flatMap(config -> {
+        return exchange.getFormData()
+            .defaultIfEmpty(new LinkedMultiValueMap<>())
+            .map(form -> {
                 Map<String, String> params = queryParams(exchange);
-                String key = config.getString("merchantPrivateKey", "");
-                String received = params.get("sign");
-                String expected = SignUtils.easyPaySign(params, key);
-                if (received == null || !expected.equalsIgnoreCase(received)) {
-                    log.warn("易支付回调验签失败: code={}", context.sessionCode());
-                    return ServerResponse.badRequest().bodyValue("fail");
-                }
-                if (!"TRADE_SUCCESS".equals(params.get("trade_status"))) {
-                    return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
-                        .bodyValue("success");
-                }
-                Map<String, Object> raw = new LinkedHashMap<>(params);
-                return stateService.markPaid(context.session(), params.get("trade_no"), raw)
-                    .then(ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).bodyValue("success"));
-            });
+                form.toSingleValueMap().forEach(params::putIfAbsent);
+                return params;
+            })
+            .flatMap(params -> configService.get(methodName(context.method()))
+                .flatMap(config -> {
+                    String key = config.getString("merchantPrivateKey", "");
+                    if (key.isBlank()) {
+                        log.warn("易支付回调被拒绝：商户密钥未配置，无法验签: code={}",
+                            context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("fail");
+                    }
+                    String received = params.get("sign");
+                    String expected = SignUtils.easyPaySign(params, key);
+                    if (received == null || !expected.equalsIgnoreCase(received)) {
+                        log.warn("易支付回调验签失败: code={}", context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("fail");
+                    }
+                    if (!"TRADE_SUCCESS".equals(params.get("trade_status"))) {
+                        return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
+                            .bodyValue("success");
+                    }
+                    String outTradeNo = params.get("out_trade_no");
+                    if (outTradeNo == null || !outTradeNo.equals(context.sessionCode())) {
+                        log.warn("易支付回调商户订单号与会话不符，拒绝: expect={} actual={} code={}",
+                            context.sessionCode(), outTradeNo, context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("fail");
+                    }
+                    PaymentSession session = context.session();
+                    String money = params.get("money");
+                    if (session != null && session.getSpec() != null
+                        && session.getSpec().getAmount() != null
+                        && (money == null || session.getSpec().getAmount()
+                            .compareTo(new java.math.BigDecimal(money)) != 0)) {
+                        log.warn("易支付回调金额与会话不符，拒绝: expect={} actual={} code={}",
+                            session.getSpec().getAmount(), money, context.sessionCode());
+                        return ServerResponse.badRequest()
+                            .contentType(MediaType.TEXT_PLAIN).bodyValue("fail");
+                    }
+                    Map<String, Object> raw = new LinkedHashMap<>(params);
+                    return stateService.markPaid(context.session(), params.get("trade_no"), raw)
+                        .then(ServerResponse.ok().contentType(MediaType.TEXT_PLAIN)
+                            .bodyValue("success"));
+                }));
     }
 
     /**

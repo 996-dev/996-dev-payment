@@ -57,14 +57,17 @@ public record PaymentInitiateContext(
     /**
      * 站点回调地址。
      *
-     * <p>形如 {@code {外部地址}/apis/payment.pangu.tax/v1alpha1/callbacks/{provider}}，
-     * 由渠道在商户后台登记后用于接收异步通知。
+     * <p>形如 {@code {外部地址}/apis/api.payment.pangu.tax/v1alpha1/callbacks/{sessionCode}}。
+     * 只带会话码不带渠道名：渠道实现从会话自身的 {@code spec.provider} 解析，
+     * 回调地址无法被用来挑选其他渠道的验签逻辑；同时单段路径在 Halo RBAC
+     * 中把会话码解析为资源名（而非子资源），匿名角色模板只需授予 {@code callbacks}
+     * 一个资源即可放行渠道回调。
      */
-    public String callbackUrl(String provider) {
+    public String callbackUrl() {
         String base = externalUrl == null ? "" : externalUrl.toString();
         if (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
-        return base + "/apis/payment.pangu.tax/v1alpha1/callbacks/" + provider;
+        return base + "/apis/api.payment.pangu.tax/v1alpha1/callbacks/" + sessionCode();
     }
 }

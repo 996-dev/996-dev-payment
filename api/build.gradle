@@ -4,9 +4,9 @@
  * <p>只放稳定契约：扩展点接口、命令/结果 DTO、状态常量。
  * 严禁依赖插件实现模块中的任何类，否则使用方会被迫引入实现 jar。
  *
- * <p>发布坐标：run.pangu.payment:pangu-payment-api:1.0.0
+ * <p>发布坐标：run.pangu.payment:996-dev-payment-api:1.0.0
  * 使用方以 {@code compileOnly} 引入，并在 plugin.yaml 的
- * {@code spec.pluginDependencies} 中声明 {@code pangu-payment}，
+ * {@code spec.pluginDependencies} 中声明 {@code 996-dev-payment}，
  * 运行时由本插件提供类型与实现。
  */
 plugins {
@@ -16,9 +16,9 @@ plugins {
 group = 'run.pangu.payment'
 version = '1.0.0'
 
-// 默认模块名是 'api'，这里固定发布名，使用方依赖 pangu-payment-api
+// 默认模块名是 'api'，这里固定发布名，使用方依赖 996-dev-payment-api
 base {
-    archivesName = 'pangu-payment-api'
+    archivesName = '996-dev-payment-api'
 }
 
 repositories {

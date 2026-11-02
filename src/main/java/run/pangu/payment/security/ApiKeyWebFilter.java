@@ -20,6 +20,7 @@ import run.halo.app.extension.Secret;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.app.security.AdditionalWebFilter;
 import run.pangu.payment.setting.ApiSetting;
+import run.pangu.payment.setting.SecuritySetting;
 
 /**
  * 支付 API 的 API Key 鉴权。
@@ -46,7 +47,7 @@ public class ApiKeyWebFilter implements AdditionalWebFilter {
 
     public static final String API_PATH_PREFIX = "/apis/api.payment.pangu.tax/";
     public static final String HEADER = "X-API-Key";
-    private static final String SECRET_NAME = "pangu-payment-secret";
+    private static final String SECRET_NAME = "996-dev-payment-secret";
     private static final String KEY_FIELD = "apiKeys";
     private static final String GROUP_API = "api";
 
@@ -62,7 +63,31 @@ public class ApiKeyWebFilter implements AdditionalWebFilter {
         if (path.contains("/callbacks/") || isReadOnlyPublic(exchange, path)) {
             return chain.filter(exchange);
         }
+        String method = exchange.getRequest().getMethod().name();
+        boolean readRequest = "GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method);
+        // 「安全策略 → 允许匿名查询支付状态」开启时，GET 查询放行；
+        // 默认关闭，查询也需要 API Key（写操作任何时候都要）。
+        if (readRequest && isReadEndpoint(path)) {
+            return settingFetcher.fetch("security", SecuritySetting.class)
+                .map(SecuritySetting::getAllowAnonymousRead)
+                .map(Boolean.TRUE::equals)
+                .defaultIfEmpty(false)
+                .onErrorResume(e -> Mono.just(false))
+                .flatMap(allowAnonymous -> allowAnonymous
+                    ? chain.filter(exchange) : requireApiKey(exchange, chain, path));
+        }
 
+        return requireApiKey(exchange, chain, path);
+    }
+
+    /** 查询类端点：会话详情与状态轮询。 */
+    private boolean isReadEndpoint(String path) {
+        String suffix = path.substring(API_PATH_PREFIX.length());
+        return suffix.matches("payments/[^/]+(/status)?");
+    }
+
+    private Mono<Void> requireApiKey(ServerWebExchange exchange, WebFilterChain chain,
+        String path) {
         String provided = exchange.getRequest().getHeaders().getFirst(HEADER);
         return loadKeys().flatMap(keys -> {
             if (keys.isEmpty()) {

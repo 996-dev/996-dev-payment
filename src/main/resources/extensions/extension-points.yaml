@@ -1,16 +1,16 @@
 # 插件对外暴露的扩展点定义。
 #
 # 这两个资源让其他插件可以用 ExtensionGetter 按类型发现本插件的能力：
-#   - pangu-payment-gateway：SINGLETON，调用方插件发起支付 / 查询 / 关单
-#   - pangu-payment-provider：MULTI_INSTANCE，第三方插件接入自己的支付渠道
+#   - 996-dev-payment-gateway：SINGLETON，调用方插件发起支付 / 查询 / 关单
+#   - 996-dev-payment-provider：MULTI_INSTANCE，第三方插件接入自己的支付渠道
 #
 # className 必须与 api 模块中的接口全限定名完全一致；接口包由
-# run.pangu.payment:pangu-payment-api 发布，使用方以 compileOnly 引用，
-# 并在 plugin.yaml 的 spec.pluginDependencies 中声明 pangu-payment。
+# run.pangu.payment:996-dev-payment-api 发布，使用方以 compileOnly 引用，
+# 并在 plugin.yaml 的 spec.pluginDependencies 中声明 996-dev-payment。
 apiVersion: plugin.halo.run/v1alpha1
 kind: ExtensionPointDefinition
 metadata:
-  name: pangu-payment-gateway
+  name: 996-dev-payment-gateway
 spec:
   className: run.pangu.payment.api.PaymentGateway
   displayName: "支付网关"
@@ -20,7 +20,7 @@ spec:
 apiVersion: plugin.halo.run/v1alpha1
 kind: ExtensionPointDefinition
 metadata:
-  name: pangu-payment-provider
+  name: 996-dev-payment-provider
 spec:
   className: run.pangu.payment.api.PaymentProviderExtension
   displayName: "支付渠道"

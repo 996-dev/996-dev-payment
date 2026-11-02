@@ -8,6 +8,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -34,12 +35,22 @@ import run.pangu.payment.extension.PaymentTransaction;
 public class PaymentStateService {
 
     private final ReactiveExtensionClient client;
+    private final PaymentNotifyService notifyService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
      * 标记会话已支付：幂等。
      *
      * <p>若会话已是 PAID，直接返回原对象；若已是 CLOSED/EXPIRED，
      * 说明存在渠道延迟回调，记录警告但不再改写状态，避免"已关闭订单被支付"的账务错乱。
+     *
+     * <p>交易号幂等：同一渠道交易号只入账一次——本会话已用该交易号记过
+     * CALLBACK SUCCESS 流水则跳过；交易号挂在其他会话名下则视为异常直接拒绝，
+     * 防止用 A 会话的真实交易号把 B 会话刷成已支付。
+     *
+     * <p>事件收敛：三条确认路径（渠道回调、主动查单、人工核销）都经此方法，
+     * {@code PaymentSucceededEvent} 只在会话首次置为 PAID 时发布一次，
+     * 随后向业务方 notifyUrl 发送一次异步通知。
      */
     public Mono<PaymentSession> markPaid(PaymentSession session, String providerTradeNo,
         Map<String, Object> raw) {
@@ -57,7 +68,42 @@ public class PaymentStateService {
                 currentPhase, session.getSpec().getSessionCode(), providerTradeNo);
             return Mono.just(session);
         }
+        if (providerTradeNo == null || providerTradeNo.isBlank()) {
+            return doMarkPaid(session, providerTradeNo, raw);
+        }
+        return findTradeNoRecords(session, providerTradeNo).collectList()
+            .flatMap(existing -> {
+                if (existing.isEmpty()) {
+                    return doMarkPaid(session, providerTradeNo, raw);
+                }
+                String sessionName = session.getMetadata() == null
+                    ? null : session.getMetadata().getName();
+                boolean sameSession = existing.stream().allMatch(tx ->
+                    tx.getSpec() != null
+                        && sessionName != null
+                        && sessionName.equals(tx.getSpec().getSessionName()));
+                if (sameSession) {
+                    log.info("渠道交易号已入账，跳过重复回调: code={} tradeNo={}",
+                        session.getSpec().getSessionCode(), providerTradeNo);
+                    return Mono.just(session);
+                }
+                return Mono.error(new IllegalStateException(
+                    "渠道交易号已被其他会话使用，拒绝入账: tradeNo=" + providerTradeNo
+                        + " code=" + session.getSpec().getSessionCode()));
+            });
+    }
 
+    /** 查询同一渠道交易号的既有 CALLBACK SUCCESS 流水。 */
+    private Flux<PaymentTransaction> findTradeNoRecords(PaymentSession session,
+        String providerTradeNo) {
+        return client.list(PaymentTransaction.class, tx -> tx.getSpec() != null
+            && PaymentTransaction.Type.CALLBACK.equals(tx.getSpec().getType())
+            && "SUCCESS".equals(tx.getSpec().getResult())
+            && providerTradeNo.equals(tx.getSpec().getProviderTradeNo()), null);
+    }
+
+    private Mono<PaymentSession> doMarkPaid(PaymentSession session, String providerTradeNo,
+        Map<String, Object> raw) {
         session.getSpec().setPaidAt(Instant.now());
         if (providerTradeNo != null && !providerTradeNo.isBlank()) {
             session.getSpec().setProviderTradeNo(providerTradeNo);
@@ -73,7 +119,33 @@ public class PaymentStateService {
 
         return client.update(session)
             .flatMap(updated -> record(updated, PaymentTransaction.Type.CALLBACK, "SUCCESS", raw)
-                .thenReturn(updated));
+                .thenReturn(updated))
+            .flatMap(updated -> {
+                // 只在首次置为 PAID 的路径上到达这里：事件与业务通知各发一次。
+                publishSucceeded(updated);
+                notifyService.notifyPaid(updated);
+                return Mono.just(updated);
+            });
+    }
+
+    /** 发布支付成功事件：api 模块的共享类型，监听方按需订阅。 */
+    private void publishSucceeded(PaymentSession session) {
+        var spec = session.getSpec();
+        try {
+            eventPublisher.publishEvent(new run.pangu.payment.api.PaymentSucceededEvent(
+                spec.getSessionCode(),
+                spec.getProvider(),
+                spec.getBizType(),
+                spec.getBizNo(),
+                spec.getAmount(),
+                spec.getCurrency(),
+                spec.getProviderTradeNo(),
+                spec.getPaidAt() == null ? Instant.now() : spec.getPaidAt()
+            ));
+        } catch (Exception e) {
+            // 事件是进程内通知，失败不应影响支付状态写回
+            log.warn("发布支付成功事件失败: code={}", spec.getSessionCode(), e);
+        }
     }
 
     /** 标记为指定终态（关闭 / 过期 / 失败）。 */    public Mono<PaymentSession> markTerminal(PaymentSession session, String phase, String message) {

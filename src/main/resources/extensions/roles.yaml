@@ -8,7 +8,7 @@ metadata:
     # 聚合到匿名角色：业务系统调用支付 API 时不带 Halo 登录态，
     # 安全性由插件内的 ApiKeyWebFilter（X-API-Key）与渠道验签保证。
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
-    plugin.halo.run/plugin-name: pangu-payment
+    plugin.halo.run/plugin-name: 996-dev-payment
   annotations:
     rbac.authorization.halo.run/module: "支付中心"
     rbac.authorization.halo.run/display-name: "支付开放接口"
@@ -40,7 +40,7 @@ metadata:
     halo.run/role-template: "true"
     # 聚合到超管：后台管理端点涉及渠道密钥与资金流水，只给最高权限角色。
     rbac.authorization.halo.run/aggregate-to-super-role: "true"
-    plugin.halo.run/plugin-name: pangu-payment
+    plugin.halo.run/plugin-name: 996-dev-payment
   annotations:
     rbac.authorization.halo.run/module: "支付中心"
     rbac.authorization.halo.run/display-name: "支付中心管理"

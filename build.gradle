@@ -95,5 +95,7 @@ tasks.named('jar') {
     // 运行时 ExtensionPointDefinition 指向的类找不到。
     // 这里显式把 api 模块的编译产物并入 jar 根目录。
     dependsOn ':api:classes'
+    // Gradle 9 任务依赖校验要求：jar 隐式消费了 :api 的 jar 工件，必须显式声明
+    mustRunAfter ':api:jar'
     from project(':api').sourceSets.main.output
 }

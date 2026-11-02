@@ -33,16 +33,22 @@ import run.pangu.payment.provider.PaymentMethodProvider;
  * 便于第三方业务系统与支付渠道回调直接调用；写操作的鉴权由
  * {@link run.pangu.payment.security.ApiKeyWebFilter} 通过 {@code X-API-Key} 完成。
  *
- * <p>端点清单：
- * <ul>
- *   <li>{@code POST /payments} 创建支付</li>
- *   <li>{@code GET  /payments/{sessionCode}} 查询会话</li>
- *   <li>{@code GET  /payments/{sessionCode}/status} 查询状态</li>
- *   <li>{@code POST /payments/{sessionCode}/sync} 主动同步渠道状态</li>
- *   <li>{@code POST /payments/{sessionCode}/close} 关闭会话</li>
- *   <li>{@code GET|POST /callbacks/{provider}/{sessionCode}} 渠道异步通知</li>
- *   <li>{@code GET  /providers} 可用渠道与配置表单</li>
- * </ul>
+     * <p>端点清单：
+     * <ul>
+     *   <li>{@code POST /payments} 创建支付</li>
+     *   <li>{@code GET  /payments/{sessionCode}} 查询会话</li>
+     *   <li>{@code GET  /payments/{sessionCode}/status} 查询状态</li>
+     *   <li>{@code POST /payments/{sessionCode}/sync} 主动同步渠道状态</li>
+     *   <li>{@code POST /payments/{sessionCode}/close} 关闭会话</li>
+     *   <li>{@code GET|POST /callbacks/{sessionCode}} 渠道异步通知</li>
+     *   <li>{@code GET  /providers} 可用渠道与配置表单</li>
+     * </ul>
+     *
+     * <p>回调路径只有会话码一段：Halo RBAC 会把 {@code /callbacks/{sessionCode}}
+     * 解析为「资源 callbacks + 名称 sessionCode」，匿名角色模板授予
+     * {@code callbacks} 资源即可放行渠道服务器；若路径里再带渠道名，
+     * 会话码会被解析成子资源而无法用通配放行。渠道实现按会话自身的
+     * {@code spec.provider} 选择，回调地址无法影响验签逻辑。
  */
 @Slf4j
 @Configuration
@@ -70,8 +76,8 @@ public class PaymentApiRouter {
             .GET(BASE + "/methods/{methodName}/config", this::getMethodConfig)
             .PUT(BASE + "/methods/{methodName}/config", this::saveMethodConfig)
             .POST(BASE + "/methods/{methodName}/toggle", this::toggleMethod)
-            .GET(BASE + "/callbacks/{provider}/{sessionCode}", this::callback)
-            .POST(BASE + "/callbacks/{provider}/{sessionCode}", this::callback)
+            .GET(BASE + "/callbacks/{sessionCode}", this::callback)
+            .POST(BASE + "/callbacks/{sessionCode}", this::callback)
             .build();
     }
 
@@ -299,9 +305,8 @@ public class PaymentApiRouter {
     }
 
     private Mono<ServerResponse> callback(ServerRequest request) {
-        String provider = request.pathVariable("provider");
         String code = request.pathVariable("sessionCode");
-        return paymentService.handleCallback(provider, code, request.exchange());
+        return paymentService.handleCallback(code, request.exchange());
     }
 
     private Map<String, Object> render(run.pangu.payment.extension.PaymentSession session,
@@ -332,9 +337,8 @@ public class PaymentApiRouter {
                 ? "" : session.getStatus().getProofSubmittedAt().toString());
         }
         data.put("providerTradeNo", orEmpty(session.getSpec().getProviderTradeNo()));
-        if (session.getSpec().getPaymentProof() != null) {
-            data.put("paymentProof", session.getSpec().getPaymentProof());
-        }
+        // 开放接口不回显付款凭证明细（付款人姓名、账号、流水号等属于后台审核数据）；
+        // 调用方通过 auditState / auditRemark 判断审核进展即可。
         if (payload != null) {
             Map<String, Object> pay = new LinkedHashMap<>();
             pay.put("responseType", String.valueOf(payload.getResponseType()));
